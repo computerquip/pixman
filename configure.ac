@@ -203,40 +203,9 @@ dnl May not fail to link without -Wall -Werror added
 dnl So try to link only when openmp is supported
 dnl ac_cv_prog_c_openmp is not defined when --disable-openmp is used
 if test "x$ac_cv_prog_c_openmp" != "xunsupported" && test "x$ac_cv_prog_c_openmp" != "x"; then
-  m4_define([openmp_test_program],[dnl
-  #include <stdio.h>
-
-  extern unsigned int lcg_seed;
-  #pragma omp threadprivate(lcg_seed)
-  unsigned int lcg_seed;
-
-  unsigned function(unsigned a, unsigned b)
-  {
-	lcg_seed ^= b;
-	return ((a + b) ^ a ) + lcg_seed;
-  }
-
-  int main(int argc, char **argv)
-  {
-	int i;
-	int n1 = 0, n2 = argc;
-	unsigned checksum = 0;
-	int verbose = argv != NULL;
-	unsigned (*test_function)(unsigned, unsigned);
-	test_function = function;
-	#pragma omp parallel for reduction(+:checksum) default(none) \
-					shared(n1, n2, test_function, verbose)
-	for (i = n1; i < n2; i++)
-	{
-		unsigned crc = test_function (i, 0);
-		if (verbose)
-			printf ("%d: %08X\n", i, crc);
-		checksum += crc;
-	}
-	printf("%u\n", checksum);
-	return 0;
-  }
-  ])
+  m4_define([openmp_test_program], [AC_LANG_SOURCE(
+	[m4_builtin([include], [compiler-tests/have_openmp.c])]
+  )])
 
   PIXMAN_LINK_WITH_ENV(
 	[CFLAGS="$OPENMP_CFLAGS" LDFLAGS="$OPENMP_CFLAGS"],
@@ -281,23 +250,9 @@ AC_MSG_CHECKING(whether to use Loongson MMI assembler)
 
 xserver_save_CFLAGS=$CFLAGS
 CFLAGS=" $LS_CFLAGS $CFLAGS -I$srcdir"
-AC_LINK_IFELSE([AC_LANG_SOURCE([[
-#ifndef __mips_loongson_vector_rev
-#error "Loongson Multimedia Instructions are only available on Loongson"
-#endif
-#if defined(__GNUC__) && (__GNUC__ < 4 || (__GNUC__ == 4 && __GNUC_MINOR__ < 4))
-#error "Need GCC >= 4.4 for Loongson MMI compilation"
-#endif
-#include "pixman/loongson-mmintrin.h"
-int main () {
-    union {
-        __m64 v;
-        char c[8];
-    } a = { .c = {1, 2, 3, 4, 5, 6, 7, 8} };
-    int b = 4;
-    __m64 c = _mm_srli_pi16 (a.v, b);
-    return 0;
-}]])], have_loongson_mmi=yes)
+AC_LINK_IFELSE([AC_LANG_SOURCE(
+	[m4_builtin([include], [compiler-tests/have_loongson_mmi.c])]
+)], have_loongson_mmi=yes)
 CFLAGS=$xserver_save_CFLAGS
 
 AC_ARG_ENABLE(loongson-mmi,
@@ -342,41 +297,9 @@ have_mmx_intrinsics=no
 AC_MSG_CHECKING(whether to use MMX intrinsics)
 xserver_save_CFLAGS=$CFLAGS
 CFLAGS="$MMX_CFLAGS $CFLAGS"
-AC_COMPILE_IFELSE([AC_LANG_SOURCE([[
-#if defined(__GNUC__) && (__GNUC__ < 3 || (__GNUC__ == 3 && __GNUC_MINOR__ < 4))
-#error "Need GCC >= 3.4 for MMX intrinsics"
-#endif
-#include <mmintrin.h>
-#include <stdint.h>
-
-/* Check support for block expressions */
-#define _mm_shuffle_pi16(A, N)						\
-    ({									\
-	__m64 ret;							\
-									\
-	/* Some versions of clang will choke on K */ 			\
-	asm ("pshufw %2, %1, %0\n\t"					\
-	     : "=y" (ret)						\
-	     : "y" (A), "K" ((const int8_t)N)				\
-	);								\
-									\
-	ret;								\
-    })
-
-int main () {
-    __m64 v = _mm_cvtsi32_si64 (1);
-    __m64 w;
-
-    w = _mm_shuffle_pi16(v, 5);
-
-    /* Some versions of clang will choke on this */
-    asm ("pmulhuw %1, %0\n\t"
-	: "+y" (w)
-	: "y" (v)
-    );
-
-    return _mm_cvtsi64_si32 (v);
-}]])], have_mmx_intrinsics=yes)
+AC_COMPILE_IFELSE([AC_LANG_SOURCE(
+	[m4_builtin([include], [compiler-tests/have_mmx_intrinsics.c])]
+)], have_mmx_intrinsics=yes)
 CFLAGS=$xserver_save_CFLAGS
 
 AC_ARG_ENABLE(mmx,
@@ -420,21 +343,9 @@ AC_MSG_CHECKING(whether to use SSE2 intrinsics)
 xserver_save_CFLAGS=$CFLAGS
 CFLAGS="$SSE2_CFLAGS $CFLAGS"
 
-AC_COMPILE_IFELSE([AC_LANG_SOURCE([[
-#if defined(__GNUC__) && (__GNUC__ < 4 || (__GNUC__ == 4 && __GNUC_MINOR__ < 2))
-#   if !defined(__amd64__) && !defined(__x86_64__)
-#      error "Need GCC >= 4.2 for SSE2 intrinsics on x86"
-#   endif
-#endif
-#include <mmintrin.h>
-#include <xmmintrin.h>
-#include <emmintrin.h>
-int param;
-int main () {
-    __m128i a = _mm_set1_epi32 (param), b = _mm_set1_epi32 (param + 1), c;
-	c = _mm_xor_si128 (a, b);
-    return _mm_cvtsi128_si32(c);
-}]])], have_sse2_intrinsics=yes)
+AC_COMPILE_IFELSE([AC_LANG_SOURCE(
+	[m4_builtin([include], [compiler-tests/have_sse2.c])]
+)], have_sse2_intrinsics=yes)
 CFLAGS=$xserver_save_CFLAGS
 
 AC_ARG_ENABLE(sse2,
@@ -469,17 +380,9 @@ AC_MSG_CHECKING(whether to use SSSE3 intrinsics)
 xserver_save_CFLAGS=$CFLAGS
 CFLAGS="$SSSE3_CFLAGS $CFLAGS"
 
-AC_COMPILE_IFELSE([AC_LANG_SOURCE([[
-#include <mmintrin.h>
-#include <xmmintrin.h>
-#include <emmintrin.h>
-#include <tmmintrin.h>
-int param;
-int main () {
-    __m128i a = _mm_set1_epi32 (param), b = _mm_set1_epi32 (param + 1), c;
-    c = _mm_maddubs_epi16 (a, b);
-    return _mm_cvtsi128_si32(c);
-}]])], have_ssse3_intrinsics=yes)
+AC_COMPILE_IFELSE([AC_LANG_SOURCE(
+	[m4_builtin([include], [compiler-tests/have_sse3.c])]
+)], have_ssse3_intrinsics=yes)
 CFLAGS=$xserver_save_CFLAGS
 
 AC_ARG_ENABLE(ssse3,
@@ -551,16 +454,9 @@ have_vmx_intrinsics=no
 AC_MSG_CHECKING(whether to use VMX/Altivec intrinsics)
 xserver_save_CFLAGS=$CFLAGS
 CFLAGS="$VMX_CFLAGS $CFLAGS"
-AC_COMPILE_IFELSE([AC_LANG_SOURCE([[
-#if defined(__GNUC__) && (__GNUC__ < 3 || (__GNUC__ == 3 && __GNUC_MINOR__ < 4))
-#error "Need GCC >= 3.4 for sane altivec support"
-#endif
-#include <altivec.h>
-int main () {
-    vector unsigned int v = vec_splat_u32 (1);
-    v = vec_sub (v, v);
-    return 0;
-}]])], have_vmx_intrinsics=yes)
+AC_COMPILE_IFELSE([AC_LANG_SOURCE(
+	[m4_builtin([include], [compiler-tests/have_vmx_intrinsics.c])]
+)], have_vmx_intrinsics=yes)
 CFLAGS=$xserver_save_CFLAGS
 
 AC_ARG_ENABLE(vmx,
@@ -593,17 +489,9 @@ have_arm_simd=no
 AC_MSG_CHECKING(whether to use ARM SIMD assembler)
 xserver_save_CFLAGS=$CFLAGS
 CFLAGS="-x assembler-with-cpp $CFLAGS"
-AC_COMPILE_IFELSE([AC_LANG_SOURCE([[
-.text
-.arch armv6
-.object_arch armv4
-.arm
-.altmacro
-#ifndef __ARM_EABI__
-#error EABI is required (to be sure that calling conventions are compatible)
-#endif
-pld [r0]
-uqadd8 r0, r0, r0]])], have_arm_simd=yes)
+AC_COMPILE_IFELSE([AC_LANG_SOURCE(
+	[m4_builtin([include], [compiler-tests/have_arm_simd.c])]
+)], have_arm_simd=yes)
 CFLAGS=$xserver_save_CFLAGS
 
 AC_ARG_ENABLE(arm-simd,
@@ -632,19 +520,9 @@ have_arm_neon=no
 AC_MSG_CHECKING(whether to use ARM NEON assembler)
 xserver_save_CFLAGS=$CFLAGS
 CFLAGS="-x assembler-with-cpp $CFLAGS"
-AC_COMPILE_IFELSE([AC_LANG_SOURCE([[
-.text
-.fpu neon
-.arch armv7a
-.object_arch armv4
-.eabi_attribute 10, 0
-.arm
-.altmacro
-#ifndef __ARM_EABI__
-#error EABI is required (to be sure that calling conventions are compatible)
-#endif
-pld [r0]
-vmovn.u16 d0, q0]])], have_arm_neon=yes)
+AC_COMPILE_IFELSE([AC_LANG_SOURCE(
+	[m4_builtin([include], [compiler-tests/have_arm_neon.c])]
+)], have_arm_neon=yes)
 CFLAGS=$xserver_save_CFLAGS
 
 AC_ARG_ENABLE(arm-neon,
@@ -691,25 +569,9 @@ have_iwmmxt_intrinsics=no
 AC_MSG_CHECKING(whether to use ARM IWMMXT intrinsics)
 xserver_save_CFLAGS=$CFLAGS
 CFLAGS="$CFLAGS $IWMMXT_CFLAGS"
-AC_COMPILE_IFELSE([AC_LANG_SOURCE([[
-#ifndef __arm__
-#error "IWMMXT is only available on ARM"
-#endif
-#ifndef __IWMMXT__
-#error "IWMMXT not enabled (with -march=iwmmxt)"
-#endif
-#if defined(__GNUC__) && (__GNUC__ < 4 || (__GNUC__ == 4 && __GNUC_MINOR__ < 8))
-#error "Need GCC >= 4.8 for IWMMXT intrinsics"
-#endif
-#include <mmintrin.h>
-int main () {
-	union {
-		__m64 v;
-		char c[8];
-	} a = { .c = {1, 2, 3, 4, 5, 6, 7, 8} };
-	int b = 4;
-	__m64 c = _mm_srli_si64 (a.v, b);
-}]])], have_iwmmxt_intrinsics=yes)
+AC_COMPILE_IFELSE([AC_LANG_SOURCE(
+	[m4_builtin([include], [compiler-tests/have_iwmmxt_intrinsics.c])]
+)], have_iwmmxt_intrinsics=yes)
 CFLAGS=$xserver_save_CFLAGS
 
 if test $enable_iwmmxt = no ; then
@@ -737,21 +599,9 @@ AC_MSG_CHECKING(whether to use MIPS DSPr2 assembler)
 xserver_save_CFLAGS=$CFLAGS
 CFLAGS="-mdspr2 $CFLAGS"
 
-AC_COMPILE_IFELSE([AC_LANG_SOURCE([[
-#if !(defined(__mips__) &&  __mips_isa_rev >= 2)
-#error MIPS DSPr2 is currently only available on MIPS32r2 platforms.
-#endif
-int
-main ()
-{
-    int c = 0, a = 0, b = 0;
-    __asm__ __volatile__ (
-        "precr.qb.ph %[c], %[a], %[b]          \n\t"
-        : [c] "=r" (c)
-        : [a] "r" (a), [b] "r" (b)
-    );
-    return c;
-}]])], have_mips_dspr2=yes)
+AC_COMPILE_IFELSE([AC_LANG_SOURCE(
+	[m4_builtin([include], [compiler-tests/have_mips_dspr2.c])]
+)], have_mips_dspr2=yes)
 CFLAGS=$xserver_save_CFLAGS
 
 AC_ARG_ENABLE(mips-dspr2,
@@ -779,12 +629,9 @@ dnl Check for GNU-style inline assembly support
 
 have_gcc_inline_asm=no
 AC_MSG_CHECKING(whether to use GNU-style inline assembler)
-AC_COMPILE_IFELSE([AC_LANG_SOURCE([[
-int main () {
-    /* Most modern architectures have a NOP instruction, so this is a fairly generic test. */
-	asm volatile ( "\tnop\n" : : : "cc", "memory" );
-    return 0;
-}]])], have_gcc_inline_asm=yes)
+AC_COMPILE_IFELSE([AC_LANG_SOURCE(
+	[m4_builtin([include], [compiler-tests/have_gcc_inline_asm.c])]
+)], have_gcc_inline_asm=yes)
 
 AC_ARG_ENABLE(gcc-inline-asm,
    [AC_HELP_STRING([--disable-gcc-inline-asm],
@@ -965,40 +812,9 @@ dnl
 dnl posix tls
 dnl
 
-m4_define([pthread_test_program],AC_LANG_SOURCE([[dnl
-#include <stdlib.h>
-#include <pthread.h>
-
-static pthread_once_t once_control = PTHREAD_ONCE_INIT;
-static pthread_key_t key;
-
-static void
-make_key (void)
-{
-    pthread_key_create (&key, NULL);
-}
-
-int
-main ()
-{
-    void *value = NULL;
-
-    if (pthread_once (&once_control, make_key) != 0)
-    {
-	value = NULL;
-    }
-    else
-    {
-	value = pthread_getspecific (key);
-	if (!value)
-	{
-	    value = malloc (100);
-	    pthread_setspecific (key, value);
-	}
-    }
-    return 0;
-}
-]]))
+m4_define([pthread_test_program],AC_LANG_SOURCE(
+	[m4_builtin([include], [compiler-tests/have_pthread.c])]
+))
 
 AC_DEFUN([PIXMAN_CHECK_PTHREAD],[dnl
     if test "z$support_for_pthreads" != "zyes"; then
@@ -1040,18 +856,9 @@ dnl __attribute__((constructor))
 support_for_attribute_constructor=no
 
 AC_MSG_CHECKING(for __attribute__((constructor)))
-AC_LINK_IFELSE([AC_LANG_SOURCE([[
-#if defined(__GNUC__) && (__GNUC__ > 2 || (__GNUC__ == 2 && __GNUC_MINOR__ >= 7))
-/* attribute 'constructor' is supported since gcc 2.7, but some compilers
- * may only pretend to be gcc, so let's try to actually use it
- */
-static int x = 1;
-static void __attribute__((constructor)) constructor_function () { x = 0; }
-int main (void) { return x; }
-#else
-#error not gcc or gcc version is older than 2.7
-#endif
-]])], support_for_attribute_constructor=yes)
+AC_LINK_IFELSE([AC_LANG_SOURCE(
+	[m4_builtin([include], [compiler-tests/support_for_attribute_constructor.c])]
+)], support_for_attribute_constructor=yes)
 
 if test x$support_for_attribute_constructor = xyes; then
    AC_DEFINE([TOOLCHAIN_SUPPORTS_ATTRIBUTE_CONSTRUCTOR],
@@ -1099,10 +906,9 @@ dnl GCC vector extensions
 support_for_gcc_vector_extensions=no
 
 AC_MSG_CHECKING(for GCC vector extensions)
-AC_LINK_IFELSE([AC_LANG_SOURCE([[
-unsigned int __attribute__ ((vector_size(16))) e, a, b;
-int main (void) { e = a - ((b << 27) + (b >> (32 - 27))) + 1; return e[0]; }
-]])], support_for_gcc_vector_extensions=yes)
+AC_LINK_IFELSE([AC_LANG_SOURCE(
+	[m4_builtin([include], [compiler-tests/support_for_gcc_vector_extensions.c])]
+)], support_for_gcc_vector_extensions=yes)
 
 if test x$support_for_gcc_vector_extensions = xyes; then
    AC_DEFINE([HAVE_GCC_VECTOR_EXTENSIONS], [],
